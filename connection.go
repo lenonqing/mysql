@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"github.com/opentracing/opentracing-go"
 	"io"
 	"net"
 	"strconv"
@@ -323,6 +324,22 @@ func (mc *mysqlConn) Exec(query string, args []driver.Value) (driver.Result, err
 	return nil, mc.markBadConn(err)
 }
 
+func (mc *mysqlConn) beginTracing(ctx context.Context, operationName, key string, value interface{}) (context.Context, opentracing.Span) {
+	var spanChild opentracing.Span
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		spanChild = opentracing.GlobalTracer().StartSpan(operationName, opentracing.ChildOf(span.Context()))
+		spanChild.SetTag(key, value)
+		ctx = opentracing.ContextWithSpan(ctx, spanChild)
+	}
+	return ctx, spanChild
+}
+
+func (mc *mysqlConn) finishTracing(spanChild opentracing.Span) {
+	if spanChild != nil {
+		spanChild.Finish()
+	}
+}
+
 // Internal function to execute commands
 func (mc *mysqlConn) exec(query string) error {
 	// Send command
@@ -493,6 +510,11 @@ func (mc *mysqlConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver
 }
 
 func (mc *mysqlConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	var spanChild opentracing.Span
+	ctx, spanChild = mc.beginTracing(ctx, "mysql.query", "query", query)
+	defer func() {
+		mc.finishTracing(spanChild)
+	}()
 	dargs, err := namedValueToValue(args)
 	if err != nil {
 		return nil, err
@@ -512,6 +534,11 @@ func (mc *mysqlConn) QueryContext(ctx context.Context, query string, args []driv
 }
 
 func (mc *mysqlConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+	var spanChild opentracing.Span
+	ctx, spanChild = mc.beginTracing(ctx, "mysql.exec", "query", query)
+	defer func() {
+		mc.finishTracing(spanChild)
+	}()
 	dargs, err := namedValueToValue(args)
 	if err != nil {
 		return nil, err
