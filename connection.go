@@ -56,7 +56,7 @@ func (mc *mysqlConn) handleParams() (err error) {
 			charsets := strings.Split(val, ",")
 			for i := range charsets {
 				// ignore errors here - a charset may not exist
-				err = mc.exec("SET NAMES " + charsets[i])
+				err = mc.exec(context.Background(), "SET NAMES "+charsets[i])
 				if err == nil {
 					break
 				}
@@ -81,7 +81,7 @@ func (mc *mysqlConn) handleParams() (err error) {
 	}
 
 	if cmdSet.Len() > 0 {
-		err = mc.exec(cmdSet.String())
+		err = mc.exec(context.Background(), cmdSet.String())
 		if err != nil {
 			return
 		}
@@ -115,7 +115,7 @@ func (mc *mysqlConn) begin(readOnly bool) (driver.Tx, error) {
 	} else {
 		q = "START TRANSACTION"
 	}
-	err := mc.exec(q)
+	err := mc.exec(context.Background(), q)
 	if err == nil {
 		return &mysqlTx{mc}, err
 	}
@@ -196,8 +196,7 @@ func (mc *mysqlConn) Prepare(query string) (driver.Stmt, error) {
 	return stmt, err
 }
 
-func (mc *mysqlConn) interpolateParams(query string, args []driver.Value) (string, error) {
-	var ctx = context.Background()
+func (mc *mysqlConn) interpolateParams(ctx context.Context, query string, args []driver.Value) (string, error) {
 	var spanChild opentracing.Span
 	ctx, spanChild = mc.beginTracing(ctx, "mysql.interpolateParams", "query", query)
 	defer func() {
@@ -301,8 +300,7 @@ func (mc *mysqlConn) interpolateParams(query string, args []driver.Value) (strin
 	return string(buf), nil
 }
 
-func (mc *mysqlConn) Exec(query string, args []driver.Value) (driver.Result, error) {
-	var ctx = context.Background()
+func (mc *mysqlConn) Exec(ctx context.Context, query string, args []driver.Value) (driver.Result, error) {
 	var spanChild opentracing.Span
 	ctx, spanChild = mc.beginTracing(ctx, "mysql.Exec", "query", query)
 	defer func() {
@@ -317,7 +315,7 @@ func (mc *mysqlConn) Exec(query string, args []driver.Value) (driver.Result, err
 			return nil, driver.ErrSkip
 		}
 		// try to interpolate the parameters to save extra roundtrips for preparing and closing a statement
-		prepared, err := mc.interpolateParams(query, args)
+		prepared, err := mc.interpolateParams(ctx, query, args)
 		if err != nil {
 			return nil, err
 		}
@@ -326,7 +324,7 @@ func (mc *mysqlConn) Exec(query string, args []driver.Value) (driver.Result, err
 	mc.affectedRows = 0
 	mc.insertId = 0
 
-	err := mc.exec(query)
+	err := mc.exec(ctx, query)
 	if err == nil {
 		return &mysqlResult{
 			affectedRows: int64(mc.affectedRows),
@@ -353,8 +351,7 @@ func (mc *mysqlConn) finishTracing(spanChild opentracing.Span) {
 }
 
 // Internal function to execute commands
-func (mc *mysqlConn) exec(query string) error {
-	var ctx = context.Background()
+func (mc *mysqlConn) exec(ctx context.Context, query string) error {
 	var spanChild opentracing.Span
 	ctx, spanChild = mc.beginTracing(ctx, "mysql.exec", "query", query)
 	defer func() {
@@ -387,11 +384,10 @@ func (mc *mysqlConn) exec(query string) error {
 }
 
 func (mc *mysqlConn) Query(query string, args []driver.Value) (driver.Rows, error) {
-	return mc.query(query, args)
+	return mc.query(context.Background(), query, args)
 }
 
-func (mc *mysqlConn) query(query string, args []driver.Value) (*textRows, error) {
-	var ctx = context.Background()
+func (mc *mysqlConn) query(ctx context.Context, query string, args []driver.Value) (*textRows, error) {
 	var spanChild opentracing.Span
 	ctx, spanChild = mc.beginTracing(ctx, "mysql.query", "query", query)
 	defer func() {
@@ -406,7 +402,7 @@ func (mc *mysqlConn) query(query string, args []driver.Value) (*textRows, error)
 			return nil, driver.ErrSkip
 		}
 		// try client-side prepare to reduce roundtrip
-		prepared, err := mc.interpolateParams(query, args)
+		prepared, err := mc.interpolateParams(ctx, query, args)
 		if err != nil {
 			return nil, err
 		}
@@ -524,7 +520,7 @@ func (mc *mysqlConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver
 		if err != nil {
 			return nil, err
 		}
-		err = mc.exec("SET TRANSACTION ISOLATION LEVEL " + level)
+		err = mc.exec(context.Background(), "SET TRANSACTION ISOLATION LEVEL "+level)
 		if err != nil {
 			return nil, err
 		}
@@ -548,7 +544,7 @@ func (mc *mysqlConn) QueryContext(ctx context.Context, query string, args []driv
 		return nil, err
 	}
 
-	rows, err := mc.query(query, dargs)
+	rows, err := mc.query(ctx, query, dargs)
 	if err != nil {
 		mc.finish()
 		return nil, err
@@ -573,7 +569,7 @@ func (mc *mysqlConn) ExecContext(ctx context.Context, query string, args []drive
 	}
 	defer mc.finish()
 
-	return mc.Exec(query, dargs)
+	return mc.Exec(ctx, query, dargs)
 }
 
 func (mc *mysqlConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
