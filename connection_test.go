@@ -26,7 +26,7 @@ func TestInterpolateParams(t *testing.T) {
 		},
 	}
 
-	q, err := mc.interpolateParams("SELECT ?+?", []driver.Value{int64(42), "gopher"})
+	q, err := mc.interpolateParams(context.Background(), "SELECT ?+?", []driver.Value{int64(42), "gopher"})
 	if err != nil {
 		t.Errorf("Expected err=nil, got %#v", err)
 		return
@@ -53,7 +53,7 @@ func TestInterpolateParamsJSONRawMessage(t *testing.T) {
 		t.Errorf("Expected err=nil, got %#v", err)
 		return
 	}
-	q, err := mc.interpolateParams("SELECT ?", []driver.Value{json.RawMessage(buf)})
+	q, err := mc.interpolateParams(context.Background(), "SELECT ?", []driver.Value{json.RawMessage(buf)})
 	if err != nil {
 		t.Errorf("Expected err=nil, got %#v", err)
 		return
@@ -73,7 +73,7 @@ func TestInterpolateParamsTooManyPlaceholders(t *testing.T) {
 		},
 	}
 
-	q, err := mc.interpolateParams("SELECT ?+?", []driver.Value{int64(42)})
+	q, err := mc.interpolateParams(context.Background(), "SELECT ?+?", []driver.Value{int64(42)})
 	if err != driver.ErrSkip {
 		t.Errorf("Expected err=driver.ErrSkip, got err=%#v, q=%#v", err, q)
 	}
@@ -90,7 +90,7 @@ func TestInterpolateParamsPlaceholderInString(t *testing.T) {
 		},
 	}
 
-	q, err := mc.interpolateParams("SELECT 'abc?xyz',?", []driver.Value{int64(42)})
+	q, err := mc.interpolateParams(context.Background(), "SELECT 'abc?xyz',?", []driver.Value{int64(42)})
 	// When InterpolateParams support string literal, this should return `"SELECT 'abc?xyz', 42`
 	if err != driver.ErrSkip {
 		t.Errorf("Expected err=driver.ErrSkip, got err=%#v, q=%#v", err, q)
@@ -106,7 +106,7 @@ func TestInterpolateParamsUint64(t *testing.T) {
 		},
 	}
 
-	q, err := mc.interpolateParams("SELECT ?", []driver.Value{uint64(42)})
+	q, err := mc.interpolateParams(context.Background(), "SELECT ?", []driver.Value{uint64(42)})
 	if err != nil {
 		t.Errorf("Expected err=nil, got err=%#v, q=%#v", err, q)
 	}
