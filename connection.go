@@ -197,6 +197,12 @@ func (mc *mysqlConn) Prepare(query string) (driver.Stmt, error) {
 }
 
 func (mc *mysqlConn) interpolateParams(query string, args []driver.Value) (string, error) {
+	var ctx = context.Background()
+	var spanChild opentracing.Span
+	ctx, spanChild = mc.beginTracing(ctx, "mysql.interpolateParams", "query", query)
+	defer func() {
+		mc.finishTracing(spanChild)
+	}()
 	// Number of ? should be same to len(args)
 	if strings.Count(query, "?") != len(args) {
 		return "", driver.ErrSkip
@@ -296,6 +302,12 @@ func (mc *mysqlConn) interpolateParams(query string, args []driver.Value) (strin
 }
 
 func (mc *mysqlConn) Exec(query string, args []driver.Value) (driver.Result, error) {
+	var ctx = context.Background()
+	var spanChild opentracing.Span
+	ctx, spanChild = mc.beginTracing(ctx, "mysql.Exec", "query", query)
+	defer func() {
+		mc.finishTracing(spanChild)
+	}()
 	if mc.closed.Load() {
 		errLog.Print(ErrInvalidConn)
 		return nil, driver.ErrBadConn
@@ -342,6 +354,12 @@ func (mc *mysqlConn) finishTracing(spanChild opentracing.Span) {
 
 // Internal function to execute commands
 func (mc *mysqlConn) exec(query string) error {
+	var ctx = context.Background()
+	var spanChild opentracing.Span
+	ctx, spanChild = mc.beginTracing(ctx, "mysql.exec", "query", query)
+	defer func() {
+		mc.finishTracing(spanChild)
+	}()
 	// Send command
 	if err := mc.writeCommandPacketStr(comQuery, query); err != nil {
 		return mc.markBadConn(err)
@@ -373,6 +391,12 @@ func (mc *mysqlConn) Query(query string, args []driver.Value) (driver.Rows, erro
 }
 
 func (mc *mysqlConn) query(query string, args []driver.Value) (*textRows, error) {
+	var ctx = context.Background()
+	var spanChild opentracing.Span
+	ctx, spanChild = mc.beginTracing(ctx, "mysql.query", "query", query)
+	defer func() {
+		mc.finishTracing(spanChild)
+	}()
 	if mc.closed.Load() {
 		errLog.Print(ErrInvalidConn)
 		return nil, driver.ErrBadConn
@@ -511,7 +535,7 @@ func (mc *mysqlConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver
 
 func (mc *mysqlConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	var spanChild opentracing.Span
-	ctx, spanChild = mc.beginTracing(ctx, "mysql.query", "query", query)
+	ctx, spanChild = mc.beginTracing(ctx, "mysql.QueryContext", "query", query)
 	defer func() {
 		mc.finishTracing(spanChild)
 	}()
@@ -535,7 +559,7 @@ func (mc *mysqlConn) QueryContext(ctx context.Context, query string, args []driv
 
 func (mc *mysqlConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	var spanChild opentracing.Span
-	ctx, spanChild = mc.beginTracing(ctx, "mysql.exec", "query", query)
+	ctx, spanChild = mc.beginTracing(ctx, "mysql.ExecContext", "query", query)
 	defer func() {
 		mc.finishTracing(spanChild)
 	}()
