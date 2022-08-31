@@ -61,6 +61,7 @@ func (c *connector) Connect(ctx context.Context) (driver.Conn, error) {
 			mc.netConn = nil
 			return nil, err
 		}
+		tc.SetNoDelay(false)
 	}
 
 	// Call startWatcher for context support (From Go 1.8)
